@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Admin Sayfası</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+
+
+<body>
+    <div class="admin-container">
+        <div class="menu-section">
+            <h2>Menü Yönetimi</h2>
+            <div id="current-menu"></div>
+            <div class="menu-form">
+                <input type="text" id="item-name" placeholder="Ürün Adı">
+                <input type="number" id="item-price" placeholder="Fiyat">
+                <button onclick="addMenuItem()">Ürün Ekle</button>
+            </div>
+        </div>
+
+        <div class="orders-section">
+            <h2>Sipariş Takibi</h2>
+            <div id="active-orders"></div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/admin.js"></script>
+</body>
+
+
+</html> 

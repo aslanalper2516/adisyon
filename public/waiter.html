@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Garson Sayfası</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div id="tables-container">
+        <!-- Masalar dinamik olarak JavaScript ile eklenecek -->
+    </div>
+
+    <div id="order-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>Sipariş İşlemleri</h2>
+            <button id="show-bill">Hesap Göster</button>
+            <button id="add-order">Sipariş Ekle</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/waiter.js"></script>
+</body>
+</html> 
