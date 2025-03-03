@@ -58,12 +58,21 @@ function displayOrders(orders) {
     
     ordersContainer.innerHTML = orders.map(order => `
         <div class="order-card ${order.status}">
-            <h3>Masa ${order.tableNo}</h3>
-            <p>Sipariş Durumu: ${getStatusText(order.status)}</p>
+            <h3>
+                Masa ${order.tableNo}
+                <span class="order-status ${order.status}">${getStatusText(order.status)}</span>
+            </h3>
             <div class="order-items">
                 ${order.items.map(item => `
-                    <div>${item.name} x ${item.quantity} - ${item.price}₺</div>
+                    <div class="order-item">
+                        <span>${item.name} x ${item.quantity}</span>
+                        <span>${item.price * item.quantity}₺</span>
+                    </div>
                 `).join('')}
+                <div class="order-item" style="font-weight: bold;">
+                    <span>Toplam:</span>
+                    <span>${order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0)}₺</span>
+                </div>
             </div>
             <div class="status-buttons">
                 <button onclick="updateOrderStatus(${order.id}, 'preparing')"
@@ -83,7 +92,8 @@ function getStatusText(status) {
     const statusMap = {
         'waiting': 'Onay Bekliyor',
         'preparing': 'Hazırlanıyor',
-        'ready': 'Hazır'
+        'ready': 'Hazır',
+        'completed': 'Tamamlandı'
     };
     return statusMap[status] || status;
 }

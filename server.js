@@ -281,11 +281,7 @@ initDatabase().then(() => {
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
                 LEFT JOIN menu m ON oi.menu_item_id = m.id
-                WHERE o.table_no IN (
-                    SELECT DISTINCT table_no 
-                    FROM orders 
-                    WHERE status != 'completed' OR status = 'completed'
-                )
+                WHERE o.status != 'completed'  -- Tamamlanmış siparişleri hariç tut
                 GROUP BY o.id, o.table_no, o.status, o.timestamp
                 ORDER BY o.timestamp DESC
             `);

@@ -1,87 +1,271 @@
+/* Genel stiller */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #f0f4f8;
+    color: #2c5282;
+}
+
+/* Masa butonları */
+#tables-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    padding: 20px;
+    justify-content: center;
+}
+
 .table-button {
     width: 150px;
     height: 100px;
-    margin: 10px;
+    margin: 5px;
     font-size: 18px;
+    border: none;
+    border-radius: 10px;
+    background-color: #fff;
+    color: #2c5282;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    cursor: pointer;
 }
 
+.table-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Masa durumları */
 .waiting {
-    background-color: red;
+    background-color: #fc8181;
     color: white;
 }
 
 .preparing {
-    background-color: blue;
+    background-color: #4299e1;
     color: white;
 }
 
 .ready {
-    background-color: green;
+    background-color: #48bb78;
     color: white;
 }
 
 .completed {
-    background-color: #333; /* Siyah renk */
+    background-color: #2d3748;
     color: white;
 }
 
+/* Modal */
 .modal {
     display: none;
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background-color: white;
-    padding: 20px;
-    border: 1px solid #ccc;
-    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    background-color: #fff;
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    min-width: 300px;
+    z-index: 1000;
 }
 
+.modal h2 {
+    color: #2c5282;
+    margin-bottom: 20px;
+    font-size: 24px;
+}
+
+.modal button {
+    background-color: #4299e1;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin: 5px;
+    transition: background-color 0.3s ease;
+}
+
+.modal button:hover {
+    background-color: #3182ce;
+}
+
+/* Admin sayfası */
 .admin-container {
     display: flex;
     padding: 20px;
-    gap: 20px;
+    gap: 30px;
+    max-width: 1400px;
+    margin: 0 auto;
 }
 
 .menu-section, .orders-section {
     flex: 1;
-    padding: 20px;
-    border: 1px solid #ccc;
-    border-radius: 5px;
+    background-color: #fff;
+    padding: 25px;
+    border-radius: 15px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.menu-section h2, .orders-section h2 {
+    color: #2c5282;
+    margin-bottom: 20px;
+    font-size: 24px;
 }
 
 .menu-form {
-    margin-top: 20px;
     display: flex;
     gap: 10px;
+    margin-top: 20px;
+}
+
+.menu-form input {
+    padding: 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 5px;
+    flex: 1;
+}
+
+.menu-form button {
+    background-color: #4299e1;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
 }
 
 .menu-item {
     display: flex;
     justify-content: space-between;
-    padding: 10px;
-    border-bottom: 1px solid #eee;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 1px solid #e2e8f0;
+    transition: background-color 0.3s ease;
 }
 
-.order-card {
-    padding: 10px;
-    margin: 10px 0;
-    border: 1px solid #ccc;
+.menu-item:hover {
+    background-color: #f7fafc;
+}
+
+.menu-item button {
+    background-color: #fc8181;
+    color: white;
+    border: none;
+    padding: 5px 15px;
     border-radius: 5px;
+    cursor: pointer;
+}
+
+/* Sipariş kartları */
+.order-card {
+    background-color: #fff;
+    padding: 20px;
+    margin: 15px 0;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border-left: 5px solid #cbd5e0; /* Varsayılan kenar rengi */
+}
+
+/* Sipariş durumlarına göre kenar renkleri */
+.order-card.waiting {
+    border-left-color: #fc8181; /* Kırmızı */
+}
+
+.order-card.preparing {
+    border-left-color: #4299e1; /* Mavi */
+}
+
+.order-card.ready {
+    border-left-color: #48bb78; /* Yeşil */
+}
+
+.order-card.completed {
+    border-left-color: #2d3748; /* Siyah */
+}
+
+.order-card h3 {
+    color: #2c5282;
+    margin-bottom: 15px;
+    font-size: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.order-status {
+    font-size: 0.9em;
+    padding: 5px 10px;
+    border-radius: 15px;
+    color: white;
+}
+
+.order-status.waiting {
+    background-color: #fc8181;
+}
+
+.order-status.preparing {
+    background-color: #4299e1;
+}
+
+.order-status.ready {
+    background-color: #48bb78;
+}
+
+.order-status.completed {
+    background-color: #2d3748;
+}
+
+.order-items {
+    margin: 15px 0;
+    background-color: #f7fafc;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.order-item {
+    padding: 8px;
+    margin: 5px 0;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+}
+
+.order-item:last-child {
+    border-bottom: none;
 }
 
 .status-buttons {
     display: flex;
     gap: 10px;
-    margin-top: 10px;
+    margin-top: 15px;
 }
 
-/* Mevcut butonlar için hover efekti ekleyelim */
-.table-button:hover {
-    opacity: 0.9;
+.status-buttons button {
+    padding: 8px 15px;
+    border: none;
+    border-radius: 5px;
     cursor: pointer;
+    color: white;
+    transition: opacity 0.3s ease;
 }
 
+.status-buttons button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.status-buttons button[onclick*="preparing"] {
+    background-color: #4299e1;
+}
+
+.status-buttons button[onclick*="ready"] {
+    background-color: #48bb78;
+}
+
+/* Hesap detayları */
 .bill-container {
     max-height: 70vh;
     overflow-y: auto;
@@ -89,82 +273,84 @@
 }
 
 .order-group {
-    margin-bottom: 20px;
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 5px;
+    background-color: #f7fafc;
+    padding: 15px;
+    margin-bottom: 15px;
+    border-radius: 10px;
 }
 
 .order-time {
-    font-weight: bold;
-    color: #666;
+    color: #4a5568;
+    font-size: 0.9em;
     margin-bottom: 10px;
-}
-
-.order-item {
-    margin: 5px 0;
-    padding: 5px;
-    background-color: #f9f9f9;
-}
-
-.order-total {
-    margin-top: 10px;
-    font-weight: bold;
-    text-align: right;
 }
 
 .total-amount {
     margin-top: 20px;
     text-align: right;
     font-size: 1.2em;
+    color: #2c5282;
 }
 
-.bill-actions {
-    margin-top: 20px;
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-}
-
-.complete-bill-btn {
-    background-color: #4CAF50;
-    color: white;
-    padding: 10px 20px;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-}
-
-.complete-bill-btn:hover {
-    background-color: #45a049;
-}
-
+/* Masa ayarları */
 .settings-section {
     margin-top: 30px;
     padding-top: 20px;
-    border-top: 1px solid #eee;
+    border-top: 1px solid #e2e8f0;
+}
+
+.settings-section h3 {
+    color: #2c5282;
+    margin-bottom: 15px;
 }
 
 .table-settings {
     display: flex;
     gap: 10px;
-    margin-top: 10px;
+    align-items: center;
 }
 
 .table-settings input {
+    padding: 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 5px;
     width: 100px;
-    padding: 5px;
 }
 
 .table-settings button {
-    padding: 5px 10px;
-    background-color: #4CAF50;
+    background-color: #4299e1;
     color: white;
     border: none;
-    border-radius: 3px;
+    padding: 8px 15px;
+    border-radius: 5px;
     cursor: pointer;
 }
 
-.table-settings button:hover {
-    background-color: #45a049;
+/* Responsive tasarım */
+@media (max-width: 768px) {
+    .admin-container {
+        flex-direction: column;
+    }
+
+    .menu-form {
+        flex-direction: column;
+    }
+
+    .table-button {
+        width: calc(50% - 20px);
+    }
+}
+
+/* Animasyonlar */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal {
+    animation: fadeIn 0.3s ease;
+}
+
+.order-card {
+    animation: fadeIn 0.3s ease;
 } 
