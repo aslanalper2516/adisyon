@@ -1,1 +1,0 @@
-{"items":[{"name":"çay","price":15},{"name":"ekler","price":20}]}

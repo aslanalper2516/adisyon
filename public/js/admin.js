@@ -9,7 +9,7 @@ async function loadMenu() {
     menuContainer.innerHTML = menu.items.map(item => `
         <div class="menu-item">
             <span>${item.name} - ${item.price}₺</span>
-            <button onclick="deleteMenuItem('${item.name}')">Sil</button>
+            <button onclick="deleteMenuItem(${item.id})">Sil</button>
         </div>
     `).join('');
 }
@@ -37,13 +37,13 @@ async function addMenuItem() {
 }
 
 // Menü ürünü sil
-async function deleteMenuItem(name) {
+async function deleteMenuItem(id) {
     const response = await fetch('/menu', {
         method: 'DELETE',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ name })
+        body: JSON.stringify({ id })
     });
     
     if (response.ok) {
@@ -53,6 +53,7 @@ async function deleteMenuItem(name) {
 
 // Siparişleri göster
 function displayOrders(orders) {
+    console.log('Displaying orders:', orders);
     const ordersContainer = document.getElementById('active-orders');
     
     ordersContainer.innerHTML = orders.map(order => `
@@ -61,15 +62,15 @@ function displayOrders(orders) {
             <p>Sipariş Durumu: ${getStatusText(order.status)}</p>
             <div class="order-items">
                 ${order.items.map(item => `
-                    <div>${item.name} x ${item.quantity}</div>
+                    <div>${item.name} x ${item.quantity} - ${item.price}₺</div>
                 `).join('')}
             </div>
             <div class="status-buttons">
-                <button onclick="updateOrderStatus(${order.tableNo}, '${order.timestamp}', 'preparing')"
+                <button onclick="updateOrderStatus(${order.id}, 'preparing')"
                     ${order.status !== 'waiting' ? 'disabled' : ''}>
                     Onayla
                 </button>
-                <button onclick="updateOrderStatus(${order.tableNo}, '${order.timestamp}', 'ready')"
+                <button onclick="updateOrderStatus(${order.id}, 'ready')"
                     ${order.status !== 'preparing' ? 'disabled' : ''}>
                     Hazır
                 </button>
@@ -88,20 +89,59 @@ function getStatusText(status) {
 }
 
 // Sipariş durumunu güncelle
-function updateOrderStatus(tableNo, timestamp, newStatus) {
+function updateOrderStatus(orderId, newStatus) {
     socket.emit('update-order-status', {
-        tableNo,
-        timestamp,
+        orderId,
         status: newStatus
     });
 }
 
 // Socket.io olaylarını dinle
 socket.on('orders-updated', (orders) => {
+    console.log('Received orders update:', orders); // Debug için log ekleyelim
     displayOrders(orders);
 });
+
+// Mevcut masa sayısını getir
+async function loadTableCount() {
+    try {
+        const response = await fetch('/settings/table-count');
+        const data = await response.json();
+        document.getElementById('table-count').value = data.value;
+    } catch (err) {
+        console.error('Masa sayısı yüklenirken hata:', err);
+    }
+}
+
+// Masa sayısını güncelle
+async function updateTableCount() {
+    const count = document.getElementById('table-count').value;
+    if (!count || count < 1) {
+        alert('Lütfen geçerli bir masa sayısı girin');
+        return;
+    }
+
+    try {
+        const response = await fetch('/settings/table-count', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ value: parseInt(count) })
+        });
+
+        if (response.ok) {
+            socket.emit('table-count-updated', { count: parseInt(count) });
+            alert('Masa sayısı güncellendi');
+        }
+    } catch (err) {
+        console.error('Masa sayısı güncellenirken hata:', err);
+        alert('Masa sayısı güncellenirken bir hata oluştu');
+    }
+}
 
 // Sayfa yüklendiğinde
 document.addEventListener('DOMContentLoaded', () => {
     loadMenu();
+    loadTableCount(); // Masa sayısını yükle
 }); 
