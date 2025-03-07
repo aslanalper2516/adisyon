@@ -22,7 +22,14 @@ async function initDatabase() {
 // Server başlatılmadan önce veritabanını hazırla
 initDatabase().then(() => {
     // Socket.io bağlantı yönetimi
-    io.on('connection', (socket) => {
+    io.on('connection', async (socket) => {
+        try {
+            const activeOrders = await getActiveOrders();
+            socket.emit('orders-updated', activeOrders);
+        } catch (err) {
+            console.error('Başlangıç sipariş yükleme hatası:', err);
+        }
+        
         console.log('New client connected'); // Debug için log ekleyelim
         
         // Yeni sipariş geldiğinde
@@ -30,15 +37,6 @@ initDatabase().then(() => {
             try {
                 console.log('Received new order:', order);
                 
-                // Masanın son durumunu kontrol et
-                const lastOrderResult = await pool.query(
-                    `SELECT status FROM orders 
-                     WHERE table_no = $1 
-                     ORDER BY timestamp DESC 
-                     LIMIT 1`,
-                    [order.tableNo]
-                );
-
                 // Yeni siparişi veritabanına ekle
                 const orderResult = await pool.query(
                     'INSERT INTO orders (table_no, status) VALUES ($1, $2) RETURNING id',
@@ -55,9 +53,25 @@ initDatabase().then(() => {
                     );
                 }
                 
-                // Güncel siparişleri getir ve yayınla
-                const orders = await getActiveOrders();
-                io.emit('orders-updated', orders);
+                // Tüm aktif siparişleri getir
+                const result = await pool.query(`
+                    SELECT orders.*, 
+                           json_agg(json_build_object(
+                               'id', order_items.id,
+                               'name', menu.name,
+                               'price', order_items.price,
+                               'quantity', order_items.quantity
+                           )) as items
+                    FROM orders
+                    LEFT JOIN order_items ON orders.id = order_items.order_id
+                    LEFT JOIN menu ON order_items.menu_item_id = menu.id
+                    WHERE orders.status != 'completed'
+                    GROUP BY orders.id
+                    ORDER BY orders.timestamp DESC
+                `);
+                
+                // Tüm bağlı clientlara güncel sipariş listesini gönder
+                io.emit('orders-updated', result.rows);
             } catch (err) {
                 console.error('Sipariş ekleme hatası:', err);
             }
@@ -66,15 +80,29 @@ initDatabase().then(() => {
         // Sipariş durumu güncellendiğinde
         socket.on('update-order-status', async (data) => {
             try {
-                console.log('Updating order status:', data); // Debug için log ekleyelim
-                
                 await pool.query(
                     'UPDATE orders SET status = $1 WHERE id = $2',
                     [data.status, data.orderId]
                 );
                 
-                const orders = await getActiveOrders();
-                io.emit('orders-updated', orders);
+                // Tüm aktif siparişleri getir
+                const result = await pool.query(`
+                    SELECT orders.*, 
+                           json_agg(json_build_object(
+                               'id', order_items.id,
+                               'name', menu.name,
+                               'price', order_items.price,
+                               'quantity', order_items.quantity
+                           )) as items
+                    FROM orders
+                    LEFT JOIN order_items ON orders.id = order_items.order_id
+                    LEFT JOIN menu ON order_items.menu_item_id = menu.id
+                    WHERE orders.status != 'completed'
+                    GROUP BY orders.id
+                    ORDER BY orders.timestamp DESC
+                `);
+                
+                io.emit('orders-updated', result.rows);
             } catch (err) {
                 console.error('Durum güncelleme hatası:', err);
             }
@@ -83,17 +111,18 @@ initDatabase().then(() => {
         // Sipariş teslim edildiğinde
         socket.on('deliver-order', async (data) => {
             try {
-                console.log('Delivering order for table:', data.tableNo);
+                console.log('Sipariş teslim ediliyor:', data);
                 
-                // Masanın aktif siparişini bul ve durumunu completed olarak güncelle
+                // Siparişi completed olarak güncelle
                 await pool.query(
                     'UPDATE orders SET status = $1 WHERE table_no = $2 AND status = $3',
                     ['completed', data.tableNo, 'ready']
                 );
                 
-                // Güncel siparişleri getir ve yayınla
-                const orders = await getActiveOrders();
-                io.emit('orders-updated', orders);
+                // Güncel siparişleri al ve gönder
+                const activeOrders = await getActiveOrders();
+                io.emit('orders-updated', activeOrders);
+                
             } catch (err) {
                 console.error('Sipariş teslim etme hatası:', err);
             }
@@ -157,10 +186,16 @@ initDatabase().then(() => {
     // Menü işlemleri
     app.get('/menu', async (req, res) => {
         try {
-            const result = await pool.query('SELECT * FROM menu ORDER BY name');
+            const result = await pool.query(`
+                SELECT menu.*, menu_categories.name as category_name 
+                FROM menu 
+                LEFT JOIN menu_categories ON menu.category_id = menu_categories.id
+                ORDER BY menu.order_index
+            `);
             res.json({ items: result.rows });
         } catch (err) {
-            res.status(500).json({ error: 'Menü getirme hatası' });
+            console.error('Menü yükleme hatası:', err);
+            res.status(500).json({ error: 'Menü yüklenirken bir hata oluştu' });
         }
     });
 
@@ -264,38 +299,23 @@ initDatabase().then(() => {
     async function getActiveOrders() {
         try {
             const result = await pool.query(`
-                SELECT 
-                    o.id, 
-                    o.table_no as "tableNo", 
-                    o.status, 
-                    o.timestamp,
-                    COALESCE(
-                        json_agg(
-                            json_build_object(
-                                'name', m.name,
-                                'quantity', oi.quantity,
-                                'price', oi.price
-                            )
-                        ) FILTER (WHERE m.name IS NOT NULL), 
-                        '[]'
-                    ) as items
-                FROM orders o
-                LEFT JOIN order_items oi ON o.id = oi.order_id
-                LEFT JOIN menu m ON oi.menu_item_id = m.id
-                WHERE o.status != 'completed' OR 
-                      o.id IN (
-                          SELECT id FROM orders 
-                          WHERE table_no = o.table_no 
-                          ORDER BY timestamp DESC 
-                          LIMIT 1
-                      )
-                GROUP BY o.id, o.table_no, o.status, o.timestamp
-                ORDER BY o.timestamp DESC
+                SELECT orders.*, 
+                       json_agg(json_build_object(
+                           'id', order_items.id,
+                           'name', menu.name,
+                           'price', order_items.price,
+                           'quantity', order_items.quantity
+                       )) as items
+                FROM orders
+                LEFT JOIN order_items ON orders.id = order_items.order_id
+                LEFT JOIN menu ON order_items.menu_item_id = menu.id
+                WHERE orders.status IN ('waiting', 'preparing', 'ready', 'completed')
+                GROUP BY orders.id, orders.table_no, orders.status, orders.timestamp
+                ORDER BY orders.timestamp DESC
             `);
-            console.log('Active orders:', result.rows);
             return result.rows;
         } catch (err) {
-            console.error('Error getting active orders:', err);
+            console.error('Aktif siparişleri getirme hatası:', err);
             return [];
         }
     }
@@ -389,6 +409,60 @@ initDatabase().then(() => {
             res.json(result.rows[0]);
         } catch (err) {
             res.status(500).json({ error: 'Ürün güncellenemedi' });
+        }
+    });
+
+    // Menü ürünü ekleme
+    app.post('/menu-items', async (req, res) => {
+        try {
+            const { name, price, categoryId } = req.body;
+            
+            // Önce aynı isimde ürün var mı kontrol et
+            const checkResult = await pool.query(
+                'SELECT id FROM menu WHERE name = $1',
+                [name]
+            );
+            
+            if (checkResult.rows.length > 0) {
+                return res.status(400).json({
+                    error: 'Bu isimde bir ürün zaten mevcut'
+                });
+            }
+
+            const result = await pool.query(
+                'INSERT INTO menu (name, price, category_id) VALUES ($1, $2, $3) RETURNING *',
+                [name, price, categoryId]
+            );
+            
+            res.json(result.rows[0]);
+        } catch (err) {
+            console.error('Ürün ekleme hatası:', err);
+            res.status(500).json({ error: 'Ürün eklenirken bir hata oluştu' });
+        }
+    });
+
+    // Siparişleri yükle (sayfa yenilendiğinde)
+    app.get('/active-orders', async (req, res) => {
+        try {
+            const result = await pool.query(`
+                SELECT orders.*, 
+                       json_agg(json_build_object(
+                           'id', order_items.id,
+                           'name', menu.name,
+                           'price', order_items.price,
+                           'quantity', order_items.quantity
+                       )) as items
+                FROM orders
+                LEFT JOIN order_items ON orders.id = order_items.order_id
+                LEFT JOIN menu ON order_items.menu_item_id = menu.id
+                WHERE orders.status != 'completed'
+                GROUP BY orders.id
+                ORDER BY orders.timestamp DESC
+            `);
+            res.json(result.rows);
+        } catch (err) {
+            console.error('Siparişleri yükleme hatası:', err);
+            res.status(500).json({ error: 'Siparişler yüklenirken bir hata oluştu' });
         }
     });
 

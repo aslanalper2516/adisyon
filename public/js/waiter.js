@@ -1,4 +1,10 @@
-const socket = io();
+const socket = io({
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
+    timeout: 5000
+});
+
 let selectedTable = null;
 
 // Masaları oluştur
@@ -34,10 +40,20 @@ async function createTables() {
 }
 
 // Masa seçeneklerini göster
-function showTableOptions(tableNo) {
+async function showTableOptions(tableNo) {
     selectedTable = tableNo;
     const modal = document.getElementById('order-modal');
     const modalContent = modal.querySelector('.modal-content');
+    
+    // XSS koruması için escapeHTML fonksiyonu
+    function escapeHTML(str) {
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
 
     // Masanın mevcut durumunu bul
     const tableButton = Array.from(document.getElementsByClassName('table-button'))
@@ -46,24 +62,44 @@ function showTableOptions(tableNo) {
     // Eğer masa hazır durumdaysa (yeşil) farklı butonlar göster
     if (tableButton && tableButton.classList.contains('ready')) {
         modalContent.innerHTML = `
-            <h2>Masa ${tableNo}</h2>
+            <h2>Masa ${escapeHTML(String(tableNo))}</h2>
             <button onclick="deliverOrder(${tableNo})">Siparişi Masaya Teslim Et</button>
             <button onclick="closeModal()">İptal</button>
+            <button style="background-color: #e2e8f0; color: #4a5568; position: absolute; right: 20px; bottom: 20px; width: auto; padding: 8px 20px; font-size: 14px; border: none; border-radius: 5px; cursor: pointer;" onclick="showOrderForm()">Geri</button>
         `;
     } else {
-        modalContent.innerHTML = `
-            <h2>Sipariş İşlemleri</h2>
-            <button id="show-bill">Hesap Göster</button>
-            <button id="add-order">Sipariş Ekle</button>
-            <button onclick="closeModal()">İptal</button>
-        `;
+        try {
+            // Masanın siparişlerini kontrol et
+            const response = await fetch(`/table-orders/${tableNo}`);
+            const data = await response.json();
+            const hasOrders = data.orders && data.orders.length > 0;
 
-        // Event listener'ları ekle
-        document.getElementById('add-order').onclick = showOrderForm;
-        document.getElementById('show-bill').onclick = () => showBill(tableNo);
+            modalContent.innerHTML = `
+                <h2>Sipariş İşlemleri</h2>
+                ${hasOrders ? `<button id="show-bill">Hesap Göster</button>` : ''}
+                <button id="add-order">Sipariş Ekle</button>
+                <button onclick="closeModal()">İptal</button>
+            `;
+
+            // Event listener'ları ekle
+            document.getElementById('add-order').onclick = showOrderForm;
+            if (hasOrders) {
+                document.getElementById('show-bill').onclick = () => showBill(tableNo);
+            }
+        } catch (err) {
+            console.error('Sipariş kontrolü hatası:', err);
+            // Hata durumunda sadece sipariş ekleme butonu göster
+            modalContent.innerHTML = `
+                <h2>Sipariş İşlemleri</h2>
+                <button id="add-order">Sipariş Ekle</button>
+                <button onclick="closeModal()">İptal</button>
+            `;
+            document.getElementById('add-order').onclick = showOrderForm;
+        }
     }
     
     modal.style.display = 'block';
+    document.body.classList.add('modal-active');
 }
 
 // Siparişi teslim et
@@ -72,13 +108,26 @@ function deliverOrder(tableNo) {
     closeModal();
 }
 
+// Modal'ı göster
+function showModal() {
+    const modal = document.getElementById('order-modal');
+    modal.style.display = 'block';
+    document.body.classList.add('modal-open');  // Body'e class ekle
+}
+
+// Modal'ı kapat
+function closeModal() {
+    const modal = document.getElementById('order-modal');
+    modal.style.display = 'none';
+    document.body.classList.remove('modal-active'); // Body scroll'u geri getir
+}
+
 // Sipariş formunu göster
 async function showOrderForm() {
     try {
         const categoriesResponse = await fetch('/menu-categories');
         const categories = await categoriesResponse.json();
         
-        // Sadece ana kategorileri filtrele
         const rootCategories = categories.filter(c => c.parent_id === null);
         
         const modal = document.getElementById('order-modal');
@@ -94,9 +143,11 @@ async function showOrderForm() {
                 `).join('')}
             </div>
             <button onclick="closeModal()">İptal</button>
+            <button style="background-color: #e2e8f0; color: #4a5568; position: absolute; right: 20px; bottom: 20px; width: auto; padding: 8px 20px; font-size: 14px; border: none; border-radius: 5px; cursor: pointer;" onclick="showTableOptions(${selectedTable})">Geri</button>
         `;
         
         modal.style.display = 'block';
+        document.body.classList.add('modal-active');
     } catch (err) {
         console.error('Kategori yükleme hatası:', err);
     }
@@ -113,10 +164,7 @@ async function showCategoryItems(categoryId, categoryName) {
         const categories = await categoriesResponse.json();
         const menu = await menuResponse.json();
         
-        // Seçilen kategorinin alt kategorilerini bul
         const subCategories = categories.filter(c => c.parent_id === categoryId);
-        
-        // Seçilen kategoriye ait ürünleri bul
         const categoryItems = menu.items.filter(item => item.category_id === categoryId);
         
         const modal = document.getElementById('order-modal');
@@ -126,15 +174,13 @@ async function showCategoryItems(categoryId, categoryName) {
             <h2>${categoryName} - Masa ${selectedTable}</h2>
             ${subCategories.length > 0 ? `
                 <div class="category-buttons">
-                    ${subCategories.map(subCat => `
-                        <button class="category-select-btn" 
-                                onclick="showCategoryItems(${subCat.id}, '${subCat.name}')">
-                            ${subCat.name}
+                    ${subCategories.map(category => `
+                        <button class="category-select-btn" onclick="showCategoryItems(${category.id}, '${category.name}')">
+                            ${category.name}
                         </button>
                     `).join('')}
                 </div>
             ` : ''}
-            
             ${categoryItems.length > 0 ? `
                 <div class="menu-items">
                     ${categoryItems.map(item => `
@@ -147,20 +193,13 @@ async function showCategoryItems(categoryId, categoryName) {
                         </div>
                     `).join('')}
                 </div>
-                <div class="modal-buttons">
-                    <button onclick="submitOrder()">Siparişi Gönder</button>
-                    <button onclick="showOrderForm()">Geri</button>
-                    <button onclick="closeModal()">İptal</button>
-                </div>
-            ` : categoryItems.length === 0 && subCategories.length === 0 ? `
-                <p>Bu kategoride ürün bulunmamaktadır.</p>
-                <div class="modal-buttons">
-                    <button onclick="showOrderForm()">Geri</button>
-                    <button onclick="closeModal()">İptal</button>
-                </div>
+                <button onclick="submitOrder()">Siparişi Gönder</button>
             ` : ''}
+            <button onclick="closeModal()">İptal</button>
+            <button style="background-color: #e2e8f0; color: #4a5568; position: absolute; right: 20px; bottom: 20px; width: auto; padding: 8px 20px; font-size: 14px; border: none; border-radius: 5px; cursor: pointer;" onclick="showOrderForm()">Geri</button>
         `;
         
+        modal.style.display = 'block';
     } catch (err) {
         console.error('Kategori detayları yükleme hatası:', err);
     }
@@ -189,11 +228,6 @@ function submitOrder() {
     console.log('Sending order:', order); // Debug için log ekleyelim
     socket.emit('new-order', order);
     closeModal();
-}
-
-function closeModal() {
-    const modal = document.getElementById('order-modal');
-    modal.style.display = 'none';
 }
 
 // Hesap görüntüleme
@@ -232,13 +266,12 @@ async function showBill(tableNo) {
                 <div class="total-amount">
                     <h3>Toplam Tutar: ${totalAmount}₺</h3>
                 </div>
-                <div class="bill-actions">
-                    <button onclick="completeBill(${tableNo})" class="complete-bill-btn">
-                        Hesabı Tamamla
-                    </button>
-                    <button onclick="closeModal()">İptal</button>
-                </div>
+                <button onclick="completeBill(${tableNo})" class="complete-bill-btn">
+                    Hesabı Tamamla
+                </button>
             </div>
+            <button onclick="closeModal()">İptal</button>
+            <button style="background-color: #e2e8f0; color: #4a5568; position: absolute; right: 20px; bottom: 20px; width: auto; padding: 8px 20px; font-size: 14px; border: none; border-radius: 5px; cursor: pointer;" onclick="showTableOptions(${tableNo})">Geri</button>
         `;
     } catch (err) {
         console.error('Hesap görüntüleme hatası:', err);
@@ -251,34 +284,70 @@ function completeBill(tableNo) {
     closeModal();
 }
 
-// Sayfa yüklendiğinde masaları oluştur
-createTables();
+// Sayfa yüklendiğinde
+document.addEventListener('DOMContentLoaded', async () => {
+    createTables();
+    
+    try {
+        // Aktif siparişleri yükle
+        const response = await fetch('/active-orders');
+        const orders = await response.json();
+        updateTableStatuses(orders);
+    } catch (err) {
+        console.error('Siparişleri yükleme hatası:', err);
+    }
+});
 
-// Siparişler güncellendiğinde masaların renklerini güncelle
-socket.on('orders-updated', (orders) => {
+// Masaların durumlarını güncelle
+function updateTableStatuses(orders) {
+    if (!orders || !Array.isArray(orders)) {
+        console.error('Geçersiz sipariş verisi:', orders);
+        return;
+    }
+
     const buttons = document.getElementsByClassName('table-button');
     
-    // Tüm masaların renklerini sıfırla
+    // Önce tüm masaların renklerini sıfırla
     Array.from(buttons).forEach(button => {
         button.className = 'table-button';
     });
     
-    // Aktif siparişi olan masaların renklerini güncelle
+    // Her bir sipariş için masa durumunu güncelle
     orders.forEach(order => {
+        if (!order || !order.table_no || !order.status) {
+            console.error('Geçersiz sipariş:', order);
+            return;
+        }
+
         const tableButton = Array.from(buttons).find(
-            button => button.textContent === `Masa ${order.tableNo}`
+            button => button.textContent === `Masa ${order.table_no}`
         );
+        
         if (tableButton) {
-            if (order.status === 'completed') {
-                tableButton.classList.add('completed'); // Siyah renk
-            } else {
-                tableButton.classList.add(order.status);
-            }
+            // Mevcut sınıfları koru ve yeni durumu ekle
+            tableButton.classList.add(order.status);
+            console.log(`Masa ${order.table_no} durumu güncellendi:`, order.status);
         }
     });
+}
+
+// Socket.io event listener'ları
+socket.on('orders-updated', (orders) => {
+    console.log('Siparişler güncellendi:', orders);
+    updateTableStatuses(orders);
 });
 
 // Masa sayısı değiştiğinde masaları yeniden oluştur
 socket.on('table-count-changed', (data) => {
+    createTables();
+});
+
+socket.on('connect_error', (error) => {
+    console.error('Socket bağlantı hatası:', error);
+    showNotification('Sunucu bağlantısında sorun oluştu', 'error');
+});
+
+socket.on('reconnect', (attemptNumber) => {
+    console.log('Sunucu bağlantısı yeniden kuruldu');
     createTables();
 }); 

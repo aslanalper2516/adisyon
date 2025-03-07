@@ -8,6 +8,10 @@ async function loadMenu() {
             fetch('/menu-categories')
         ]);
         
+        if (!menuResponse.ok || !categoriesResponse.ok) {
+            throw new Error('Menü veya kategoriler yüklenemedi');
+        }
+        
         const menu = await menuResponse.json();
         const categories = await categoriesResponse.json();
         
@@ -15,6 +19,7 @@ async function loadMenu() {
         menuContainer.innerHTML = buildMenuHTML(categories, menu.items);
     } catch (err) {
         console.error('Menü yükleme hatası:', err);
+        showNotification('Menü yüklenirken bir hata oluştu', 'error');
     }
 }
 
@@ -92,7 +97,15 @@ function showAddItemModal() {
 
 // Modalı kapat
 function closeModal(modalId) {
-    document.getElementById(modalId).style.display = 'none';
+    const modal = document.getElementById(modalId || 'order-modal');
+    if (modal) {
+        modal.classList.add('closing');
+        setTimeout(() => {
+            modal.style.display = 'none';
+            modal.classList.remove('closing');
+            document.body.classList.remove('modal-active');
+        }, 300);
+    }
 }
 
 // Bildirim göster
@@ -112,43 +125,43 @@ function showNotification(message, type = 'success') {
     }, 3000);
 }
 
-// Yeni menü ürünü ekle
+// Ürün ekleme fonksiyonu
 async function addMenuItem() {
     const name = document.getElementById('item-name').value;
     const price = document.getElementById('item-price').value;
-    const category_id = document.getElementById('item-category').value;
-    
-    if (!name || !price || !category_id) {
-        showNotification('Lütfen tüm alanları doldurun', 'error');
+    const categorySelect = document.getElementById('item-category');
+    const categoryId = categorySelect.value;
+
+    if (!name || !price || !categoryId) {
+        alert('Lütfen tüm alanları doldurun');
         return;
     }
-    
+
     try {
-        const response = await fetch('/menu', {
+        const response = await fetch('/menu-items', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                name,
-                price: Number(price),
-                category_id: Number(category_id)
+                name: name,
+                price: parseFloat(price),
+                categoryId: parseInt(categoryId)
             })
         });
-        
-        if (response.ok) {
-            loadMenu();
-            closeModal('item-modal');
-            document.getElementById('item-name').value = '';
-            document.getElementById('item-price').value = '';
-            document.getElementById('item-category').value = '';
-            showNotification('Ürün başarıyla eklendi');
-        } else {
-            showNotification('Ürün eklenirken bir hata oluştu', 'error');
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || 'Ürün eklenirken bir hata oluştu');
         }
+
+        // Başarılı ekleme sonrası
+        closeModal('item-modal');
+        loadMenu(); // Menüyü yeniden yükle
+        showNotification('Ürün başarıyla eklendi', 'success');
     } catch (err) {
         console.error('Ürün ekleme hatası:', err);
-        showNotification('Ürün eklenirken bir hata oluştu', 'error');
+        showNotification(err.message, 'error');
     }
 }
 
@@ -247,7 +260,7 @@ function displayOrders(orders) {
     ordersContainer.innerHTML = orders.map(order => `
         <div class="order-card ${order.status}">
             <h3>
-                Masa ${order.tableNo}
+                Masa ${order.table_no}
                 <span class="order-status ${order.status}">${getStatusText(order.status)}</span>
             </h3>
             <div class="order-items">
@@ -276,14 +289,15 @@ function displayOrders(orders) {
     `).join('');
 }
 
+// Sipariş durumu metinleri
 function getStatusText(status) {
-    const statusMap = {
-        'waiting': 'Onay Bekliyor',
+    const statusTexts = {
+        'waiting': 'Bekliyor',
         'preparing': 'Hazırlanıyor',
         'ready': 'Hazır',
         'completed': 'Tamamlandı'
     };
-    return statusMap[status] || status;
+    return statusTexts[status] || status;
 }
 
 // Sipariş durumunu güncelle
@@ -498,7 +512,41 @@ async function loadCategoriesForItem() {
 }
 
 // Sayfa yüklendiğinde
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     loadMenu();
-    loadTableCount(); // Masa sayısını yükle
-}); 
+    loadTableCount();
+    
+    try {
+        // Aktif siparişleri yükle
+        const response = await fetch('/active-orders');
+        const orders = await response.json();
+        updateOrdersList(orders);
+    } catch (err) {
+        console.error('Siparişleri yükleme hatası:', err);
+    }
+});
+
+// Siparişleri güncelle
+function updateOrdersList(orders) {
+    const ordersContainer = document.getElementById('orders-list');
+    if (!ordersContainer) return;
+
+    ordersContainer.innerHTML = orders.map(order => `
+        <div class="order-card ${order.status}">
+            <div class="order-header">
+                <h3>Masa ${order.table_no}</h3>
+                <span class="order-time">${new Date(order.timestamp).toLocaleString()}</span>
+            </div>
+            <div class="order-items">
+                ${order.items.map(item => `
+                    <div class="order-item">
+                        ${item.name} x ${item.quantity} = ${item.price * item.quantity}₺
+                    </div>
+                `).join('')}
+            </div>
+            <div class="order-actions">
+                ${getOrderActionButtons(order)}
+            </div>
+        </div>
+    `).join('');
+} 

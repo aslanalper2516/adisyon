@@ -7,10 +7,9 @@ CREATE TABLE IF NOT EXISTS menu_categories (
 );
 
 -- Menü tablosunu güncelle
-DROP TABLE IF EXISTS menu CASCADE;
 CREATE TABLE IF NOT EXISTS menu (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL UNIQUE,
+    name VARCHAR(100),
     price DECIMAL(10,2) NOT NULL,
     category_id INTEGER REFERENCES menu_categories(id),
     order_index INTEGER DEFAULT 0
