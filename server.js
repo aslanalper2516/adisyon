@@ -66,8 +66,8 @@ initDatabase().then(() => {
                     LEFT JOIN order_items ON orders.id = order_items.order_id
                     LEFT JOIN menu ON order_items.menu_item_id = menu.id
                     WHERE orders.status != 'completed'
-                    GROUP BY orders.id
-                    ORDER BY orders.timestamp DESC
+                    GROUP BY orders.id, orders.table_no, orders.status, orders.timestamp
+                    ORDER BY orders.timestamp ASC
                 `);
                 
                 // Tüm bağlı clientlara güncel sipariş listesini gönder
@@ -98,8 +98,8 @@ initDatabase().then(() => {
                     LEFT JOIN order_items ON orders.id = order_items.order_id
                     LEFT JOIN menu ON order_items.menu_item_id = menu.id
                     WHERE orders.status != 'completed'
-                    GROUP BY orders.id
-                    ORDER BY orders.timestamp DESC
+                    GROUP BY orders.id, orders.table_no, orders.status, orders.timestamp
+                    ORDER BY orders.timestamp ASC
                 `);
                 
                 io.emit('orders-updated', result.rows);
@@ -311,7 +311,7 @@ initDatabase().then(() => {
                 LEFT JOIN menu ON order_items.menu_item_id = menu.id
                 WHERE orders.status IN ('waiting', 'preparing', 'ready', 'completed')
                 GROUP BY orders.id, orders.table_no, orders.status, orders.timestamp
-                ORDER BY orders.timestamp DESC
+                ORDER BY orders.timestamp ASC
             `);
             return result.rows;
         } catch (err) {

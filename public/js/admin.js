@@ -252,11 +252,56 @@ async function deleteMenuItem(id) {
     }
 }
 
-// Siparişleri göster
+// Bekleyen siparişlerin özetini oluştur
+function createOrdersSummary(orders) {
+    // Bekleyen ve hazırlanıyor durumundaki siparişleri filtrele
+    const activeOrders = orders.filter(order => ['waiting', 'preparing'].includes(order.status));
+    
+    // Tüm ürünleri ve miktarlarını topla
+    const itemSummary = {};
+    
+    activeOrders.forEach(order => {
+        order.items.forEach(item => {
+            if (!itemSummary[item.name]) {
+                itemSummary[item.name] = 0;
+            }
+            itemSummary[item.name] += item.quantity;
+        });
+    });
+    
+    // HTML oluştur
+    const summaryHTML = `
+        <div class="orders-summary">
+            <h4>Bekleyen Siparişler Özeti</h4>
+            <div class="summary-items">
+                ${Object.entries(itemSummary)
+                    .map(([name, quantity]) => `
+                        <span class="summary-item">${name}: ${quantity}</span>
+                    `).join(' | ')}
+            </div>
+        </div>
+    `;
+    
+    // Özeti sayfaya ekle
+    const container = document.getElementById('active-orders');
+    container.insertAdjacentHTML('beforebegin', summaryHTML);
+}
+
+// Siparişleri göster fonksiyonunu güncelle
 function displayOrders(orders) {
     console.log('Displaying orders:', orders);
     const ordersContainer = document.getElementById('active-orders');
     
+    // Önce mevcut özeti temizle
+    const existingSummary = document.querySelector('.orders-summary');
+    if (existingSummary) {
+        existingSummary.remove();
+    }
+    
+    // Yeni özeti oluştur
+    createOrdersSummary(orders);
+    
+    // Siparişleri listele
     ordersContainer.innerHTML = orders.map(order => `
         <div class="order-card ${order.status}">
             <h3>
