@@ -11,12 +11,11 @@
     <div class="admin-container">
         <div class="menu-section">
             <h2>Menü Yönetimi</h2>
-            <div id="current-menu"></div>
-            <div class="menu-form">
-                <input type="text" id="item-name" placeholder="Ürün Adı">
-                <input type="number" id="item-price" placeholder="Fiyat">
-                <button onclick="addMenuItem()">Ürün Ekle</button> 
+            <div class="menu-actions">
+                <button onclick="showAddCategoryModal()">Kategori Ekle</button>
+                <button onclick="showAddItemModal()">Ürün Ekle</button>
             </div>
+            <div id="current-menu"></div>
             
             <div class="settings-section">
                 <h3>Masa Ayarları</h3>
@@ -31,6 +30,42 @@
             <h2>Sipariş Takibi</h2>
             <div id="active-orders"></div>
         </div>
+    </div>
+
+    <!-- Kategori Ekleme Modal -->
+    <div id="category-modal" class="modal">
+        <div class="modal-content">
+            <h3>Yeni Kategori Ekle</h3>
+            <input type="text" id="category-name" placeholder="Kategori Adı">
+            <select id="parent-category">
+                <option value="">Ana Kategori</option>
+            </select>
+            <div class="modal-buttons">
+                <button onclick="addCategory()">Ekle</button>
+                <button onclick="closeModal('category-modal')">İptal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ürün Ekleme Modal -->
+    <div id="item-modal" class="modal">
+        <div class="modal-content">
+            <h3>Yeni Ürün Ekle</h3>
+            <input type="text" id="item-name" placeholder="Ürün Adı">
+            <input type="number" id="item-price" placeholder="Fiyat">
+            <select id="item-category">
+                <option value="">Kategori Seçin</option>
+            </select>
+            <div class="modal-buttons">
+                <button onclick="addMenuItem()">Ekle</button>
+                <button onclick="closeModal('item-modal')">İptal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bildirim alanı -->
+    <div id="notification" class="notification">
+        <span id="notification-message"></span>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>

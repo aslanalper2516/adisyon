@@ -165,16 +165,17 @@ initDatabase().then(() => {
     });
 
     app.post('/menu', async (req, res) => {
-        const { name, price } = req.body;
+        const { name, price, category_id } = req.body;
         try {
-            await pool.query(
-                'INSERT INTO menu (name, price) VALUES ($1, $2)',
-                [name, price]
+            const result = await pool.query(
+                'INSERT INTO menu (name, price, category_id) VALUES ($1, $2, $3) RETURNING *',
+                [name, price, category_id]
             );
-            const result = await pool.query('SELECT * FROM menu ORDER BY name');
-            res.status(201).json({ items: result.rows });
+            const menuResult = await pool.query('SELECT * FROM menu ORDER BY name');
+            res.status(201).json({ items: menuResult.rows });
         } catch (err) {
-            res.status(500).json({ error: 'Ürün ekleme hatası' });
+            console.error('Ürün ekleme hatası:', err);
+            res.status(500).json({ error: 'Ürün eklenemedi' });
         }
     });
 
@@ -231,7 +232,7 @@ initDatabase().then(() => {
             if (result.rows.length > 0) {
                 res.json({ value: result.rows[0].value });
             } else {
-                // Eğer ayar bulunamazsa varsayılan değeri ekle ve onu döndür
+                // Sadece ilk kez çalıştığında varsayılan değeri ekle
                 await pool.query(
                     'INSERT INTO settings (name, value) VALUES ($1, $2)',
                     ['table_count', 20]
@@ -299,8 +300,101 @@ initDatabase().then(() => {
         }
     }
 
+    // Kategorileri getir
+    app.get('/menu-categories', async (req, res) => {
+        try {
+            const result = await pool.query('SELECT * FROM menu_categories ORDER BY order_index');
+            res.json(result.rows);
+        } catch (err) {
+            res.status(500).json({ error: 'Kategoriler getirilemedi' });
+        }
+    });
+
+    // Yeni kategori ekle
+    app.post('/menu-categories', async (req, res) => {
+        const { name, parent_id } = req.body;
+        try {
+            const result = await pool.query(
+                'INSERT INTO menu_categories (name, parent_id) VALUES ($1, $2) RETURNING *',
+                [name, parent_id]
+            );
+            res.status(201).json(result.rows[0]);
+        } catch (err) {
+            res.status(500).json({ error: 'Kategori eklenemedi' });
+        }
+    });
+
+    // Kategori sil (recursive silme ile)
+    app.delete('/menu-categories/:id', async (req, res) => {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            
+            // Recursive olarak tüm alt kategorileri ve ürünleri sil
+            async function deleteRecursive(categoryId) {
+                // Alt kategorileri bul
+                const subCategories = await client.query(
+                    'SELECT id FROM menu_categories WHERE parent_id = $1',
+                    [categoryId]
+                );
+                
+                // Alt kategorileri recursive olarak sil
+                for (const row of subCategories.rows) {
+                    await deleteRecursive(row.id);
+                }
+                
+                // Bu kategoriye ait ürünleri sil
+                await client.query('DELETE FROM menu WHERE category_id = $1', [categoryId]);
+                
+                // Kategoriyi sil
+                await client.query('DELETE FROM menu_categories WHERE id = $1', [categoryId]);
+            }
+            
+            await deleteRecursive(req.params.id);
+            await client.query('COMMIT');
+            res.json({ success: true });
+        } catch (err) {
+            await client.query('ROLLBACK');
+            console.error('Kategori silme hatası:', err);
+            res.status(500).json({ error: 'Kategori silinemedi' });
+        } finally {
+            client.release();
+        }
+    });
+
+    // Kategori güncelle
+    app.put('/menu-categories/:id', async (req, res) => {
+        const { id } = req.params;
+        const { name, parent_id } = req.body;
+        try {
+            const result = await pool.query(
+                'UPDATE menu_categories SET name = $1, parent_id = $2 WHERE id = $3 RETURNING *',
+                [name, parent_id, id]
+            );
+            res.json(result.rows[0]);
+        } catch (err) {
+            res.status(500).json({ error: 'Kategori güncellenemedi' });
+        }
+    });
+
+    // Ürün güncelle
+    app.put('/menu/:id', async (req, res) => {
+        const { id } = req.params;
+        const { name, price, category_id } = req.body;
+        try {
+            const result = await pool.query(
+                'UPDATE menu SET name = $1, price = $2, category_id = $3 WHERE id = $4 RETURNING *',
+                [name, price, category_id, id]
+            );
+            res.json(result.rows[0]);
+        } catch (err) {
+            res.status(500).json({ error: 'Ürün güncellenemedi' });
+        }
+    });
+
     const PORT = 3000;
     http.listen(PORT, () => {
         console.log(`Server running on port ${PORT}`);
     });
 }); 
+

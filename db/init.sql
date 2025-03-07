@@ -1,8 +1,19 @@
--- Menü tablosu
+-- Menü kategorileri tablosu
+CREATE TABLE IF NOT EXISTS menu_categories (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    parent_id INTEGER REFERENCES menu_categories(id),
+    order_index INTEGER DEFAULT 0
+);
+
+-- Menü tablosunu güncelle
+DROP TABLE IF EXISTS menu CASCADE;
 CREATE TABLE IF NOT EXISTS menu (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL UNIQUE,
-    price DECIMAL(10,2) NOT NULL
+    price DECIMAL(10,2) NOT NULL,
+    category_id INTEGER REFERENCES menu_categories(id),
+    order_index INTEGER DEFAULT 0
 );
 
 -- Siparişler tablosu
@@ -39,5 +50,7 @@ CREATE TABLE IF NOT EXISTS settings (
     value INTEGER NOT NULL
 );
 
--- Varsayılan masa sayısını ekle
-INSERT INTO settings (name, value) VALUES ('table_count', 20) ON CONFLICT (name) DO UPDATE SET value = 20; 
+-- Varsayılan masa sayısını ekle (sadece tablo boşsa)
+INSERT INTO settings (name, value) 
+SELECT 'table_count', 20
+WHERE NOT EXISTS (SELECT 1 FROM settings WHERE name = 'table_count');

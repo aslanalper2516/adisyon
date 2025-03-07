@@ -2,52 +2,240 @@ const socket = io();
 
 // Menüyü yükle ve göster
 async function loadMenu() {
-    const response = await fetch('/menu');
-    const menu = await response.json();
-    const menuContainer = document.getElementById('current-menu');
+    try {
+        const [menuResponse, categoriesResponse] = await Promise.all([
+            fetch('/menu'),
+            fetch('/menu-categories')
+        ]);
+        
+        const menu = await menuResponse.json();
+        const categories = await categoriesResponse.json();
+        
+        const menuContainer = document.getElementById('current-menu');
+        menuContainer.innerHTML = buildMenuHTML(categories, menu.items);
+    } catch (err) {
+        console.error('Menü yükleme hatası:', err);
+    }
+}
+
+// Kategori ağacını oluştur
+function buildMenuHTML(categories, items) {
+    const categoryMap = new Map(categories.map(c => [c.id, { ...c, children: [] }]));
     
-    menuContainer.innerHTML = menu.items.map(item => `
-        <div class="menu-item">
-            <span>${item.name} - ${item.price}₺</span>
-            <button onclick="deleteMenuItem(${item.id})">Sil</button>
+    // Kategori hiyerarşisini oluştur
+    const rootCategories = [];
+    categories.forEach(category => {
+        if (category.parent_id === null) {
+            rootCategories.push(categoryMap.get(category.id));
+        } else {
+            const parent = categoryMap.get(category.parent_id);
+            if (parent) {
+                parent.children.push(categoryMap.get(category.id));
+            }
+        }
+    });
+
+    // Menüyü oluştur
+    return rootCategories
+        .map(category => buildCategoryHTML(category, items, categoryMap))
+        .join('');
+}
+
+function buildCategoryHTML(category, items, categoryMap) {
+    const categoryItems = items.filter(item => item.category_id === category.id);
+    const hasChildren = category.children && category.children.length > 0;
+    
+    return `
+        <div class="menu-category">
+            <div class="category-header">
+                <h3>${category.name}</h3>
+                <div class="category-actions">
+                    <button onclick="editCategory(${category.id})">Düzenle</button>
+                    <button onclick="deleteCategory(${category.id})">Sil</button>
+                </div>
+            </div>
+            ${hasChildren ? `
+                <div class="subcategories">
+                    ${category.children
+                        .map(child => buildCategoryHTML(child, items, categoryMap))
+                        .join('')}
+                </div>
+            ` : ''}
+            <div class="category-items">
+                ${categoryItems.map(item => `
+                    <div class="menu-item">
+                        <span>${item.name} - ${item.price}₺</span>
+                        <div class="item-actions">
+                            <button onclick="editMenuItem(${item.id})">Düzenle</button>
+                            <button onclick="deleteMenuItem(${item.id})">Sil</button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
         </div>
-    `).join('');
+    `;
+}
+
+// Kategori modalını göster
+function showAddCategoryModal() {
+    const modal = document.getElementById('category-modal');
+    modal.style.display = 'block';
+    loadParentCategories();
+}
+
+// Ürün modalını göster
+function showAddItemModal() {
+    const modal = document.getElementById('item-modal');
+    modal.style.display = 'block';
+    loadCategoriesForItem();
+}
+
+// Modalı kapat
+function closeModal(modalId) {
+    document.getElementById(modalId).style.display = 'none';
+}
+
+// Bildirim göster
+function showNotification(message, type = 'success') {
+    const notification = document.getElementById('notification');
+    const notificationMessage = document.getElementById('notification-message');
+    
+    notification.className = `notification ${type}`;
+    notificationMessage.textContent = message;
+    
+    // Bildirimi göster
+    setTimeout(() => notification.classList.add('show'), 100);
+    
+    // 3 saniye sonra bildirimi gizle
+    setTimeout(() => {
+        notification.classList.remove('show');
+    }, 3000);
 }
 
 // Yeni menü ürünü ekle
 async function addMenuItem() {
     const name = document.getElementById('item-name').value;
     const price = document.getElementById('item-price').value;
+    const category_id = document.getElementById('item-category').value;
     
-    if (!name || !price) return;
+    if (!name || !price || !category_id) {
+        showNotification('Lütfen tüm alanları doldurun', 'error');
+        return;
+    }
     
-    const response = await fetch('/menu', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ name, price: Number(price) })
-    });
-    
-    if (response.ok) {
-        loadMenu();
-        document.getElementById('item-name').value = '';
-        document.getElementById('item-price').value = '';
+    try {
+        const response = await fetch('/menu', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                name,
+                price: Number(price),
+                category_id: Number(category_id)
+            })
+        });
+        
+        if (response.ok) {
+            loadMenu();
+            closeModal('item-modal');
+            document.getElementById('item-name').value = '';
+            document.getElementById('item-price').value = '';
+            document.getElementById('item-category').value = '';
+            showNotification('Ürün başarıyla eklendi');
+        } else {
+            showNotification('Ürün eklenirken bir hata oluştu', 'error');
+        }
+    } catch (err) {
+        console.error('Ürün ekleme hatası:', err);
+        showNotification('Ürün eklenirken bir hata oluştu', 'error');
     }
 }
 
-// Menü ürünü sil
-async function deleteMenuItem(id) {
-    const response = await fetch('/menu', {
-        method: 'DELETE',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ id })
-    });
+// Yeni kategori ekle
+async function addCategory() {
+    const name = document.getElementById('category-name').value;
+    const parent_id = document.getElementById('parent-category').value;
     
-    if (response.ok) {
-        loadMenu();
+    if (!name) {
+        showNotification('Lütfen kategori adını girin', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/menu-categories', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                name,
+                parent_id: parent_id ? Number(parent_id) : null
+            })
+        });
+        
+        if (response.ok) {
+            loadMenu();
+            closeModal('category-modal');
+            document.getElementById('category-name').value = '';
+            document.getElementById('parent-category').value = '';
+            showNotification('Kategori başarıyla eklendi');
+        } else {
+            showNotification('Kategori eklenirken bir hata oluştu', 'error');
+        }
+    } catch (err) {
+        console.error('Kategori ekleme hatası:', err);
+        showNotification('Kategori eklenirken bir hata oluştu', 'error');
+    }
+}
+
+// Kategori silme işlemi
+async function deleteCategory(categoryId) {
+    if (!confirm('Bu kategori ve içindeki tüm ürünler silinecektir. Onaylıyor musunuz?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/menu-categories/${categoryId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            loadMenu();
+            showNotification('Kategori başarıyla silindi');
+        } else {
+            showNotification('Kategori silinirken bir hata oluştu', 'error');
+        }
+    } catch (err) {
+        console.error('Kategori silme hatası:', err);
+        showNotification('Kategori silinirken bir hata oluştu', 'error');
+    }
+}
+
+// Ürün silme işlemi
+async function deleteMenuItem(id) {
+    if (!confirm('Bu ürün silinecektir. Onaylıyor musunuz?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/menu', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ id })
+        });
+        
+        if (response.ok) {
+            loadMenu();
+            showNotification('Ürün başarıyla silindi');
+        } else {
+            showNotification('Ürün silinirken bir hata oluştu', 'error');
+        }
+    } catch (err) {
+        console.error('Ürün silme hatası:', err);
+        showNotification('Ürün silinirken bir hata oluştu', 'error');
     }
 }
 
@@ -147,6 +335,165 @@ async function updateTableCount() {
     } catch (err) {
         console.error('Masa sayısı güncellenirken hata:', err);
         alert('Masa sayısı güncellenirken bir hata oluştu');
+    }
+}
+
+// Kategori düzenleme modalını göster
+async function editCategory(categoryId) {
+    try {
+        const response = await fetch('/menu-categories');
+        const categories = await response.json();
+        const category = categories.find(c => c.id === categoryId);
+        
+        if (!category) return;
+
+        const modal = document.getElementById('category-modal');
+        const modalContent = modal.querySelector('.modal-content');
+        modalContent.innerHTML = `
+            <h3>Kategori Düzenle</h3>
+            <input type="text" id="category-name" placeholder="Kategori Adı" value="${category.name}">
+            <select id="parent-category">
+                <option value="">Ana Kategori</option>
+                ${categories
+                    .filter(c => c.id !== categoryId) // Kendisini parent olarak seçemesin
+                    .map(c => `
+                        <option value="${c.id}" ${c.id === category.parent_id ? 'selected' : ''}>
+                            ${c.name}
+                        </option>
+                    `).join('')}
+            </select>
+            <div class="modal-buttons">
+                <button onclick="updateCategory(${categoryId})">Güncelle</button>
+                <button onclick="closeModal('category-modal')">İptal</button>
+            </div>
+        `;
+        
+        modal.style.display = 'block';
+    } catch (err) {
+        console.error('Kategori düzenleme hatası:', err);
+    }
+}
+
+// Kategori güncelle
+async function updateCategory(categoryId) {
+    const name = document.getElementById('category-name').value;
+    const parent_id = document.getElementById('parent-category').value || null;
+    
+    try {
+        const response = await fetch(`/menu-categories/${categoryId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ name, parent_id })
+        });
+        
+        if (response.ok) {
+            loadMenu();
+            closeModal('category-modal');
+        }
+    } catch (err) {
+        console.error('Kategori güncelleme hatası:', err);
+    }
+}
+
+// Ürün düzenleme modalını göster
+async function editMenuItem(itemId) {
+    try {
+        const [menuResponse, categoriesResponse] = await Promise.all([
+            fetch('/menu'),
+            fetch('/menu-categories')
+        ]);
+        
+        const menu = await menuResponse.json();
+        const categories = await categoriesResponse.json();
+        const item = menu.items.find(i => i.id === itemId);
+        
+        if (!item) return;
+
+        const modal = document.getElementById('item-modal');
+        const modalContent = modal.querySelector('.modal-content');
+        modalContent.innerHTML = `
+            <h3>Ürün Düzenle</h3>
+            <input type="text" id="item-name" placeholder="Ürün Adı" value="${item.name}">
+            <input type="number" id="item-price" placeholder="Fiyat" value="${item.price}">
+            <select id="item-category">
+                <option value="">Kategori Seçin</option>
+                ${categories.map(c => `
+                    <option value="${c.id}" ${c.id === item.category_id ? 'selected' : ''}>
+                        ${c.name}
+                    </option>
+                `).join('')}
+            </select>
+            <div class="modal-buttons">
+                <button onclick="updateMenuItem(${itemId})">Güncelle</button>
+                <button onclick="closeModal('item-modal')">İptal</button>
+            </div>
+        `;
+        
+        modal.style.display = 'block';
+    } catch (err) {
+        console.error('Ürün düzenleme hatası:', err);
+    }
+}
+
+// Ürün güncelle
+async function updateMenuItem(itemId) {
+    const name = document.getElementById('item-name').value;
+    const price = document.getElementById('item-price').value;
+    const category_id = document.getElementById('item-category').value || null;
+    
+    try {
+        const response = await fetch(`/menu/${itemId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ name, price: Number(price), category_id })
+        });
+        
+        if (response.ok) {
+            loadMenu();
+            closeModal('item-modal');
+        }
+    } catch (err) {
+        console.error('Ürün güncelleme hatası:', err);
+    }
+}
+
+// Kategori listesini yükle (yeni kategori eklerken kullanılacak)
+async function loadParentCategories() {
+    try {
+        const response = await fetch('/menu-categories');
+        const categories = await response.json();
+        const select = document.getElementById('parent-category');
+        
+        select.innerHTML = `
+            <option value="">Ana Kategori</option>
+            ${categories.map(category => `
+                <option value="${category.id}">${category.name}</option>
+            `).join('')}
+        `;
+    } catch (err) {
+        console.error('Kategori listesi yükleme hatası:', err);
+    }
+}
+
+// Kategori listesini yükle (ürün eklerken kullanılacak)
+async function loadCategoriesForItem() {
+    try {
+        const response = await fetch('/menu-categories');
+        const categories = await response.json();
+        const select = document.getElementById('item-category');
+        
+        select.innerHTML = `
+            <option value="">Kategori Seçin</option>
+            ${categories.map(category => `
+                <option value="${category.id}">${category.name}</option>
+            `).join('')}
+        `;
+    } catch (err) {
+        console.error('Kategori listesi yükleme hatası:', err);
     }
 }
 

@@ -72,30 +72,98 @@ function deliverOrder(tableNo) {
     closeModal();
 }
 
-// Sipariş formunu göster (mevcut add-order onclick fonksiyonu)
+// Sipariş formunu göster
 async function showOrderForm() {
-    const menuResponse = await fetch('/menu');
-    const menu = await menuResponse.json();
-    
-    const modal = document.getElementById('order-modal');
-    const modalContent = modal.querySelector('.modal-content');
-    
-    modalContent.innerHTML = `
-        <h2>Sipariş Ekle - Masa ${selectedTable}</h2>
-        <div class="menu-items">
-            ${menu.items.map(item => `
-                <div class="menu-item-select">
-                    <span>${item.name} - ${item.price}₺</span>
-                    <input type="number" min="0" value="0" 
-                        data-item="${item.id}"
-                        data-name="${item.name}"
-                        data-price="${item.price}">
+    try {
+        const categoriesResponse = await fetch('/menu-categories');
+        const categories = await categoriesResponse.json();
+        
+        // Sadece ana kategorileri filtrele
+        const rootCategories = categories.filter(c => c.parent_id === null);
+        
+        const modal = document.getElementById('order-modal');
+        const modalContent = modal.querySelector('.modal-content');
+        
+        modalContent.innerHTML = `
+            <h2>Kategori Seçin - Masa ${selectedTable}</h2>
+            <div class="category-buttons">
+                ${rootCategories.map(category => `
+                    <button class="category-select-btn" onclick="showCategoryItems(${category.id}, '${category.name}')">
+                        ${category.name}
+                    </button>
+                `).join('')}
+            </div>
+            <button onclick="closeModal()">İptal</button>
+        `;
+        
+        modal.style.display = 'block';
+    } catch (err) {
+        console.error('Kategori yükleme hatası:', err);
+    }
+}
+
+// Seçilen kategorinin alt kategorilerini veya ürünlerini göster
+async function showCategoryItems(categoryId, categoryName) {
+    try {
+        const [categoriesResponse, menuResponse] = await Promise.all([
+            fetch('/menu-categories'),
+            fetch('/menu')
+        ]);
+        
+        const categories = await categoriesResponse.json();
+        const menu = await menuResponse.json();
+        
+        // Seçilen kategorinin alt kategorilerini bul
+        const subCategories = categories.filter(c => c.parent_id === categoryId);
+        
+        // Seçilen kategoriye ait ürünleri bul
+        const categoryItems = menu.items.filter(item => item.category_id === categoryId);
+        
+        const modal = document.getElementById('order-modal');
+        const modalContent = modal.querySelector('.modal-content');
+        
+        modalContent.innerHTML = `
+            <h2>${categoryName} - Masa ${selectedTable}</h2>
+            ${subCategories.length > 0 ? `
+                <div class="category-buttons">
+                    ${subCategories.map(subCat => `
+                        <button class="category-select-btn" 
+                                onclick="showCategoryItems(${subCat.id}, '${subCat.name}')">
+                            ${subCat.name}
+                        </button>
+                    `).join('')}
                 </div>
-            `).join('')}
-        </div>
-        <button onclick="submitOrder()">Siparişi Gönder</button>
-        <button onclick="closeModal()">İptal</button>
-    `;
+            ` : ''}
+            
+            ${categoryItems.length > 0 ? `
+                <div class="menu-items">
+                    ${categoryItems.map(item => `
+                        <div class="menu-item-select">
+                            <span>${item.name} - ${item.price}₺</span>
+                            <input type="number" min="0" value="0" 
+                                data-item="${item.id}"
+                                data-name="${item.name}"
+                                data-price="${item.price}">
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="modal-buttons">
+                    <button onclick="submitOrder()">Siparişi Gönder</button>
+                    <button onclick="showOrderForm()">Geri</button>
+                    <button onclick="closeModal()">İptal</button>
+                </div>
+            ` : categoryItems.length === 0 && subCategories.length === 0 ? `
+                <p>Bu kategoride ürün bulunmamaktadır.</p>
+                <div class="modal-buttons">
+                    <button onclick="showOrderForm()">Geri</button>
+                    <button onclick="closeModal()">İptal</button>
+                </div>
+            ` : ''}
+        `;
+        
+    } catch (err) {
+        console.error('Kategori detayları yükleme hatası:', err);
+    }
 }
 
 function submitOrder() {
